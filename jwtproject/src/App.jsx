@@ -1,28 +1,28 @@
-import { useState, useEffect } from "react";
-import axios from "axios";
-import API from "./api";
+import { useEffect, useState } from "react";
+import api from "./api"; // Axios instance
 import "./App.css";
 
-// Create axios instance only once
-const api = axios.create({ baseURL: API });
+function App() {
+  // ===== Login state =====
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
 
-// Add token automatically
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+  // ===== Register state =====
+  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [registerRole, setRegisterRole] = useState("user");
 
-export default function App() {
+  // ===== Auth & role =====
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [role, setRole] = useState("user");
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-
+  // ===== Slots =====
   const [slots, setSlots] = useState([]);
+  const [slotNumber, setSlotNumber] = useState("");
+  const [slotTypeCreate, setSlotTypeCreate] = useState("normal");
+  const [slotFloorCreate, setSlotFloorCreate] = useState("G");
 
-  // Booking fields
+  // ===== Booking form =====
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [vehicleType, setVehicleType] = useState("");
   const [userName, setUserName] = useState("");
@@ -31,42 +31,46 @@ export default function App() {
   const [endTime, setEndTime] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("pending");
   const [amount, setAmount] = useState("");
-
-  // Create slot
-  const [slotNumber, setSlotNumber] = useState("");
   const [slotType, setSlotType] = useState("normal");
   const [floor, setFloor] = useState("G");
 
+  // ===== Fetch slots =====
   const fetchSlots = async () => {
     try {
-      const res = await api.get("/slots");
+      const res = await api.get("/api/slots");
       setSlots(res.data);
     } catch (err) {
-      console.log("Error fetching slots", err.response?.data);
+      console.error(err.response?.data || err.message);
     }
   };
 
+  // ===== Load user from token =====
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-
     if (token) {
-      setIsLoggedIn(true);
-      setRole(role || "user");
-      fetchSlots();
+      try {
+        const decoded = JSON.parse(atob(token.split(".")[1]));
+        setRole(decoded.role);
+        setIsLoggedIn(true);
+        fetchSlots();
+      } catch (err) {
+        console.error("Invalid token", err);
+        localStorage.removeItem("token");
+      }
     }
   }, []);
 
-  // LOGIN
+  // ===== Login =====
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await api.post("/login", { username, password });
-
+      const res = await api.post("/api/login", {
+        username: loginUsername,
+        password: loginPassword,
+      });
       localStorage.setItem("token", res.data.token);
-      localStorage.setItem("role", res.data.role);
-
-      setRole(res.data.role);
+      const decoded = JSON.parse(atob(res.data.token.split(".")[1]));
+      setRole(decoded.role);
       setIsLoggedIn(true);
       fetchSlots();
     } catch (err) {
@@ -74,44 +78,56 @@ export default function App() {
     }
   };
 
-  // REGISTER
+  // ===== Register =====
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/register", { username, password, role });
-      alert("Registered. Login now.");
+      await api.post("/api/register", {
+        username: registerUsername,
+        password: registerPassword,
+        role: registerRole,
+      });
+      alert("User registered. Please login now.");
+      setRegisterUsername("");
+      setRegisterPassword("");
+      setRegisterRole("user");
     } catch (err) {
       alert(err.response?.data || "Register failed");
     }
   };
 
-  // LOGOUT
+  // ===== Logout =====
   const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem("token");
     setIsLoggedIn(false);
+    setRole("user");
     setSlots([]);
   };
 
-  // Create Slot
-  const handleCreateSlot = async (e) => {
+  // ===== Admin: Add slot =====
+  const handleAddSlot = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/slots", {
-        slotNumber,
-        slotType,
-        floor,
+      await api.post("/api/slots", {
+        slotNumber: Number(slotNumber),
+        slotType: slotTypeCreate,
+        floor: slotFloorCreate,
       });
       setSlotNumber("");
       fetchSlots();
     } catch (err) {
-      alert(err.response?.data || "Slot create failed");
+      alert(err.response?.data || "Create slot failed");
     }
   };
 
-  // Book Slot
-  const handleBook = async (id) => {
+  // ===== Book slot =====
+  const handleBook = async (slotId) => {
     try {
-      await api.post(`/book/${id}`, {
+      if (!vehicleNumber || !userName) {
+        alert("Vehicle number and your name required");
+        return;
+      }
+      await api.post(`/api/book/${slotId}`, {
         vehicleNumber,
         vehicleType,
         userName,
@@ -119,108 +135,250 @@ export default function App() {
         startTime,
         endTime,
         paymentStatus,
-        amount,
+        amount: Number(amount) || 0,
+        slotType,
+        floor,
       });
-
+      // Clear booking form
+      setVehicleNumber("");
+      setVehicleType("");
+      setUserName("");
+      setPhone("");
+      setStartTime("");
+      setEndTime("");
+      setPaymentStatus("pending");
+      setAmount("");
+      setSlotType("normal");
+      setFloor("G");
       fetchSlots();
-      alert("Booked!");
     } catch (err) {
       alert(err.response?.data || "Booking failed");
     }
   };
 
-  // Cancel booking
-  const handleCancel = async (id) => {
-    await api.post(`/cancel/${id}`);
-    fetchSlots();
+  // ===== Cancel booking =====
+  const handleCancel = async (slotId) => {
+    try {
+      await api.post(`/api/cancel/${slotId}`);
+      fetchSlots();
+    } catch (err) {
+      alert(err.response?.data || "Cancel failed");
+    }
   };
 
-  // Delete slot
-  const handleDelete = async (id) => {
-    await api.delete(`/slots/${id}`);
-    fetchSlots();
+  // ===== Delete slot (admin) =====
+  const handleDelete = async (slotId) => {
+    try {
+      await api.delete(`/api/slots/${slotId}`);
+      fetchSlots();
+    } catch (err) {
+      alert(err.response?.data || "Delete failed");
+    }
   };
 
   return (
-    <div className="container">
+    <div className="App">
       {!isLoggedIn ? (
-        <div className="auth-box">
-          {/* Login */}
-          <form onSubmit={handleLogin}>
+        <div className="auth-container">
+          <div>
             <h2>Login</h2>
-            <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
-            <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
-            <button>Login</button>
-          </form>
-
-          {/* Register */}
-          <form onSubmit={handleRegister}>
+            <form onSubmit={handleLogin}>
+              <input
+                placeholder="Username"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                required
+              />
+              <button type="submit">Login</button>
+            </form>
+          </div>
+          <div>
             <h2>Register</h2>
-            <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
-            <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
-            <select onChange={(e) => setRole(e.target.value)}>
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button>Register</button>
-          </form>
+            <form onSubmit={handleRegister}>
+              <input
+                placeholder="Username"
+                value={registerUsername}
+                onChange={(e) => setRegisterUsername(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={registerPassword}
+                onChange={(e) => setRegisterPassword(e.target.value)}
+                required
+              />
+              <select
+                value={registerRole}
+                onChange={(e) => setRegisterRole(e.target.value)}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button type="submit">Register</button>
+            </form>
+          </div>
         </div>
       ) : (
-        <>
+        <div>
           <h1>Parking Slots</h1>
-          <button onClick={logout}>Logout</button>
-          <p>Logged in as: <b>{role}</b></p>
+          <div className="logged-in-info">
+            Logged in as: <b>{role}</b>{" "}
+            <button onClick={logout}>Logout</button>
+          </div>
 
+          {/* Admin: Create slot */}
           {role === "admin" && (
-            <form onSubmit={handleCreateSlot} className="create-slot">
-              <h3>Create Slot</h3>
-              <input type="number" placeholder="Slot Number" value={slotNumber} onChange={(e) => setSlotNumber(e.target.value)} />
-              <select value={slotType} onChange={(e) => setSlotType(e.target.value)}>
+            <form onSubmit={handleAddSlot}>
+              <input
+                type="number"
+                placeholder="Slot Number"
+                value={slotNumber}
+                onChange={(e) => setSlotNumber(e.target.value)}
+                required
+              />
+              <select
+                value={slotTypeCreate}
+                onChange={(e) => setSlotTypeCreate(e.target.value)}
+              >
                 <option value="normal">Normal</option>
                 <option value="ev">EV</option>
                 <option value="vip">VIP</option>
+                <option value="handicap">Handicap</option>
               </select>
-              <select value={floor} onChange={(e) => setFloor(e.target.value)}>
+              <select
+                value={slotFloorCreate}
+                onChange={(e) => setSlotFloorCreate(e.target.value)}
+              >
                 <option value="G">G</option>
                 <option value="1">1</option>
                 <option value="2">2</option>
               </select>
-              <button>Create</button>
+              <button type="submit">Add Slot</button>
             </form>
           )}
 
-          {/* Booking form */}
-          <div className="booking-form">
-            <h3>Booking Details</h3>
-            <input placeholder="Vehicle Number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
-            <input placeholder="Vehicle Type" value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} />
-            <input placeholder="Your Name" value={userName} onChange={(e) => setUserName(e.target.value)} />
-            <input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            <input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-            <input type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </div>
-
-          {/* Slots */}
-          <ul className="slots">
-            {slots.map((s) => (
-              <li key={s._id} className="slot-card">
-                <h3>Slot {s.slotNumber}</h3>
-                <p>Type: {s.slotType}</p>
-                <p>Floor: {s.floor}</p>
-                <p>Status: {s.isBooked ? "Booked" : "Available"}</p>
-
-                {!s.isBooked && <button onClick={() => handleBook(s._id)}>Book</button>}
-                {s.isBooked && <button onClick={() => handleCancel(s._id)}>Cancel</button>}
-
-                {role === "admin" && (
-                  <button onClick={() => handleDelete(s._id)}>Delete</button>
-                )}
+          {/* Slots list */}
+          <ul>
+            {slots.map((slot) => (
+              <li key={slot._id} className="slot-card">
+                <div className="slot-info">
+                  <strong>Slot {slot.slotNumber}</strong> ({slot.slotType} - Floor{" "}
+                  {slot.floor})
+                  <br />
+                  <span className={slot.isBooked ? "booked" : "available"}>
+                    {slot.isBooked ? "Booked" : "Available"}
+                  </span>
+                  {slot.isBooked && (
+                    <div className="booking-details">
+                      <div>Booked by: {slot.bookedBy?.username}</div>
+                      <div>
+                        Vehicle: {slot.vehicleNumber} ({slot.vehicleType})
+                      </div>
+                      <div>Phone: {slot.phone}</div>
+                      <div>
+                        Time:{" "}
+                        {slot.startTime
+                          ? new Date(slot.startTime).toLocaleString()
+                          : "-"}{" "}
+                        →{" "}
+                        {slot.endTime
+                          ? new Date(slot.endTime).toLocaleString()
+                          : "-"}
+                      </div>
+                      <div>
+                        Payment: {slot.paymentStatus} ₹{slot.amount}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="slot-buttons">
+                  {!slot.isBooked && (
+                    <button
+                      onClick={() => handleBook(slot._id)}
+                      disabled={!vehicleNumber || !userName}
+                    >
+                      Book
+                    </button>
+                  )}
+                  {slot.isBooked && <button onClick={() => handleCancel(slot._id)}>Cancel</button>}
+                  {role === "admin" && (
+                    <button onClick={() => handleDelete(slot._id)}>Delete</button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
-        </>
+
+          {/* Booking form */}
+          <h3>Booking Details (fill before booking)</h3>
+          <div className="booking-form">
+            <input
+              placeholder="Vehicle Number"
+              value={vehicleNumber}
+              onChange={(e) => setVehicleNumber(e.target.value)}
+            />
+            <input
+              placeholder="Vehicle Type"
+              value={vehicleType}
+              onChange={(e) => setVehicleType(e.target.value)}
+            />
+            <input
+              placeholder="Your Name"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+            />
+            <input
+              placeholder="Phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <input
+              type="datetime-local"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+            <input
+              type="datetime-local"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+            />
+            <input
+              type="number"
+              placeholder="Amount"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <select
+              value={paymentStatus}
+              onChange={(e) => setPaymentStatus(e.target.value)}
+            >
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+            </select>
+            <select value={slotType} onChange={(e) => setSlotType(e.target.value)}>
+              <option value="normal">Normal</option>
+              <option value="ev">EV</option>
+              <option value="vip">VIP</option>
+              <option value="handicap">Handicap</option>
+            </select>
+            <select value={floor} onChange={(e) => setFloor(e.target.value)}>
+              <option value="G">G</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </div>
+        </div>
       )}
     </div>
   );
 }
+
+export default App;

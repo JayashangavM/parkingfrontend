@@ -1,35 +1,161 @@
-.container {
-  padding: 20px;
-  max-width: 900px;
-  margin: auto;
+/* General styling */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f6f8;
+  margin: 0;
+  padding: 0;
 }
 
-.auth-box {
+.App {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+/* Login/Register container */
+.auth-container {
   display: flex;
   justify-content: space-between;
+  gap: 20px;
 }
 
-form {
-  border: 1px solid #ccc;
-  padding: 20px;
-  width: 45%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.auth-container div {
+  flex: 1;
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.1);
 }
 
-button {
+.auth-container h2 {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.auth-container input,
+.auth-container select,
+.auth-container button {
+  width: 100%;
   padding: 8px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+}
+
+.auth-container button {
+  background-color: #007bff;
+  color: #fff;
+  border: none;
   cursor: pointer;
 }
 
-.slots {
+.auth-container button:hover {
+  background-color: #0056b3;
+}
+
+/* Logged-in info */
+.logged-in-info {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logged-in-info button {
+  padding: 5px 10px;
+  background-color: #dc3545;
+}
+
+.logged-in-info button:hover {
+  background-color: #a71d2a;
+}
+
+/* Slot cards */
+ul {
   list-style: none;
   padding: 0;
 }
 
 .slot-card {
-  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
   margin-bottom: 10px;
+  background-color: #fafafa;
+}
+
+.slot-info {
+  flex: 1;
+}
+
+.booked {
+  color: #fff;
+  background-color: #dc3545;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.available {
+  color: #fff;
+  background-color: #28a745;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.booking-details {
+  margin-top: 5px;
+  font-size: 0.9em;
+  color: #333;
+}
+
+/* Slot buttons */
+.slot-buttons button {
+  margin-left: 5px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+
+.slot-buttons button:hover {
+  opacity: 0.8;
+}
+
+.slot-buttons button:nth-child(1) {
+  background-color: #007bff; /* Book */
+  color: #fff;
+}
+
+.slot-buttons button:nth-child(2) {
+  background-color: #ffc107; /* Cancel */
+  color: #fff;
+}
+
+.slot-buttons button:nth-child(3) {
+  background-color: #dc3545; /* Delete */
+  color: #fff;
+}
+
+/* Booking form */
+.booking-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.booking-form input,
+.booking-form select {
+  padding: 8px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
 }
