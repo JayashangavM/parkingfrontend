@@ -1,19 +1,26 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
+import API from "./api";
 import "./App.css";
 
-function App() {
-  // Auth state
+// Create axios instance only once
+const api = axios.create({ baseURL: API });
+
+// Add token automatically
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [role, setRole] = useState("user");
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Slots
   const [slots, setSlots] = useState([]);
-  const [slotNumber, setSlotNumber] = useState("");
-  const [slotTypeCreate, setSlotTypeCreate] = useState("normal");
-  const [slotFloorCreate, setSlotFloorCreate] = useState("G");
 
   // Booking fields
   const [vehicleNumber, setVehicleNumber] = useState("");
@@ -24,42 +31,29 @@ function App() {
   const [endTime, setEndTime] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("pending");
   const [amount, setAmount] = useState("");
+
+  // Create slot
+  const [slotNumber, setSlotNumber] = useState("");
   const [slotType, setSlotType] = useState("normal");
   const [floor, setFloor] = useState("G");
 
-
-
-  // Axios instance with token automatically attached
-  const api = axios.create({ baseURL: process.env.REACT_APP_API_URL });
-  api.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  });
-
-  // Fetch slots
   const fetchSlots = async () => {
     try {
-      const res = await api.get("/api/slots");
+      const res = await api.get("/slots");
       setSlots(res.data);
     } catch (err) {
-      console.error("Fetch slots error:", err.response?.data || err.message);
+      console.log("Error fetching slots", err.response?.data);
     }
   };
 
-  // Load user role from token
   useEffect(() => {
     const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+
     if (token) {
-      try {
-        const decoded = JSON.parse(atob(token.split(".")[1]));
-        setRole(decoded.role);
-        setIsLoggedIn(true);
-        fetchSlots();
-      } catch (err) {
-        console.error("Invalid token", err);
-        localStorage.removeItem("token");
-      }
+      setIsLoggedIn(true);
+      setRole(role || "user");
+      fetchSlots();
     }
   }, []);
 
@@ -67,10 +61,12 @@ function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const res = await api.post("/api/login", { username, password });
+      const res = await api.post("/login", { username, password });
+
       localStorage.setItem("token", res.data.token);
-      const decoded = JSON.parse(atob(res.data.token.split(".")[1]));
-      setRole(decoded.role);
+      localStorage.setItem("role", res.data.role);
+
+      setRole(res.data.role);
       setIsLoggedIn(true);
       fetchSlots();
     } catch (err) {
@@ -82,8 +78,8 @@ function App() {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/api/register", { username, password, role });
-      alert("User registered. Please login now.");
+      await api.post("/register", { username, password, role });
+      alert("Registered. Login now.");
     } catch (err) {
       alert(err.response?.data || "Register failed");
     }
@@ -91,37 +87,31 @@ function App() {
 
   // LOGOUT
   const logout = () => {
-    localStorage.removeItem("token");
+    localStorage.clear();
     setIsLoggedIn(false);
-    setRole("user");
     setSlots([]);
   };
 
-  // ADMIN: Create slot
-  const handleAddSlot = async (e) => {
+  // Create Slot
+  const handleCreateSlot = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/api/slots", {
-        slotNumber: Number(slotNumber),
-        slotType: slotTypeCreate,
-        floor: slotFloorCreate,
+      await api.post("/slots", {
+        slotNumber,
+        slotType,
+        floor,
       });
       setSlotNumber("");
       fetchSlots();
     } catch (err) {
-      alert(err.response?.data || "Create slot failed");
+      alert(err.response?.data || "Slot create failed");
     }
   };
 
-  // BOOK slot
-  const handleBook = async (slotId) => {
+  // Book Slot
+  const handleBook = async (id) => {
     try {
-      if (!vehicleNumber || !userName) {
-        alert("Vehicle number and your name required");
-        return;
-      }
-
-      await api.post(`/api/book/${slotId}`, {
+      await api.post(`/book/${id}`, {
         vehicleNumber,
         vehicleType,
         userName,
@@ -129,131 +119,79 @@ function App() {
         startTime,
         endTime,
         paymentStatus,
-        amount: Number(amount) || 0,
-        slotType,
-        floor,
+        amount,
       });
 
-      // Clear booking fields
-      setVehicleNumber("");
-      setVehicleType("");
-      setUserName("");
-      setPhone("");
-      setStartTime("");
-      setEndTime("");
-      setPaymentStatus("pending");
-      setAmount("");
-      setSlotType("normal");
-      setFloor("G");
-
       fetchSlots();
+      alert("Booked!");
     } catch (err) {
       alert(err.response?.data || "Booking failed");
     }
   };
 
-  // CANCEL booking
-  const handleCancel = async (slotId) => {
-    try {
-      await api.post(`/api/cancel/${slotId}`);
-      fetchSlots();
-    } catch (err) {
-      alert(err.response?.data || "Cancel failed");
-    }
+  // Cancel booking
+  const handleCancel = async (id) => {
+    await api.post(`/cancel/${id}`);
+    fetchSlots();
   };
 
-  // DELETE slot (admin)
-  const handleDelete = async (slotId) => {
-    try {
-      await api.delete(`/api/slots/${slotId}`);
-      fetchSlots();
-    } catch (err) {
-      alert(err.response?.data || "Delete failed");
-    }
+  // Delete slot
+  const handleDelete = async (id) => {
+    await api.delete(`/slots/${id}`);
+    fetchSlots();
   };
 
   return (
-    <div className="App">
+    <div className="container">
       {!isLoggedIn ? (
-        <div className="auth-container">
-          <div>
+        <div className="auth-box">
+          {/* Login */}
+          <form onSubmit={handleLogin}>
             <h2>Login</h2>
-            <form onSubmit={handleLogin}>
-              <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
-              <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-              <button type="submit">Login</button>
-            </form>
-          </div>
+            <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
+            <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
+            <button>Login</button>
+          </form>
 
-          <div>
+          {/* Register */}
+          <form onSubmit={handleRegister}>
             <h2>Register</h2>
-            <form onSubmit={handleRegister}>
-              <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
-              <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
-              <select onChange={(e) => setRole(e.target.value)} defaultValue="user">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-              <button type="submit">Register</button>
-            </form>
-          </div>
+            <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
+            <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
+            <select onChange={(e) => setRole(e.target.value)}>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button>Register</button>
+          </form>
         </div>
       ) : (
-        <div>
+        <>
           <h1>Parking Slots</h1>
-          <div className="logged-in-info">
-            Logged in as: <b>{role}</b> <button onClick={logout}>Logout</button>
-          </div>
+          <button onClick={logout}>Logout</button>
+          <p>Logged in as: <b>{role}</b></p>
 
-          {/* Admin: create slot */}
           {role === "admin" && (
-            <form onSubmit={handleAddSlot}>
+            <form onSubmit={handleCreateSlot} className="create-slot">
+              <h3>Create Slot</h3>
               <input type="number" placeholder="Slot Number" value={slotNumber} onChange={(e) => setSlotNumber(e.target.value)} />
-              <select value={slotTypeCreate} onChange={(e) => setSlotTypeCreate(e.target.value)}>
+              <select value={slotType} onChange={(e) => setSlotType(e.target.value)}>
                 <option value="normal">Normal</option>
                 <option value="ev">EV</option>
                 <option value="vip">VIP</option>
-                <option value="handicap">Handicap</option>
               </select>
-              <select value={slotFloorCreate} onChange={(e) => setSlotFloorCreate(e.target.value)}>
+              <select value={floor} onChange={(e) => setFloor(e.target.value)}>
                 <option value="G">G</option>
                 <option value="1">1</option>
                 <option value="2">2</option>
               </select>
-              <button type="submit">Add Slot</button>
+              <button>Create</button>
             </form>
           )}
 
-          {/* Slots */}
-          <ul>
-            {slots.map((slot) => (
-              <li key={slot._id} className="slot-card">
-                <div className="slot-info">
-                  <strong>Slot {slot.slotNumber}</strong> ({slot.slotType} - Floor {slot.floor})<br />
-                  <span className={slot.isBooked ? "booked" : "available"}>{slot.isBooked ? "Booked" : "Available"}</span>
-                  {slot.isBooked && (
-                    <div className="booking-details">
-                      <div>Booked by: {slot.bookedBy?.username}</div>
-                      <div>Vehicle: {slot.vehicleNumber} ({slot.vehicleType})</div>
-                      <div>Phone: {slot.phone}</div>
-                      <div>Time: {slot.startTime ? new Date(slot.startTime).toLocaleString() : "-"} → {slot.endTime ? new Date(slot.endTime).toLocaleString() : "-"}</div>
-                      <div>Payment: {slot.paymentStatus} ₹{slot.amount}</div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="slot-buttons">
-                  {!slot.isBooked && <button onClick={() => handleBook(slot._id)}>Book</button>}
-                  {slot.isBooked && <button onClick={() => handleCancel(slot._id)}>Cancel</button>}
-                  {role === "admin" && <button onClick={() => handleDelete(slot._id)}>Delete</button>}
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          {/* Booking form for users */}
-          <h3>Booking Details (fill before booking)</h3>
+          {/* Booking form */}
           <div className="booking-form">
+            <h3>Booking Details</h3>
             <input placeholder="Vehicle Number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
             <input placeholder="Vehicle Type" value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} />
             <input placeholder="Your Name" value={userName} onChange={(e) => setUserName(e.target.value)} />
@@ -261,26 +199,28 @@ function App() {
             <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
             <input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
             <input type="number" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option value="pending">Pending</option>
-              <option value="paid">Paid</option>
-            </select>
-            <select value={slotType} onChange={(e) => setSlotType(e.target.value)}>
-              <option value="normal">Normal</option>
-              <option value="ev">EV</option>
-              <option value="vip">VIP</option>
-              <option value="handicap">Handicap</option>
-            </select>
-            <select value={floor} onChange={(e) => setFloor(e.target.value)}>
-              <option value="G">G</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-            </select>
           </div>
-        </div>
+
+          {/* Slots */}
+          <ul className="slots">
+            {slots.map((s) => (
+              <li key={s._id} className="slot-card">
+                <h3>Slot {s.slotNumber}</h3>
+                <p>Type: {s.slotType}</p>
+                <p>Floor: {s.floor}</p>
+                <p>Status: {s.isBooked ? "Booked" : "Available"}</p>
+
+                {!s.isBooked && <button onClick={() => handleBook(s._id)}>Book</button>}
+                {s.isBooked && <button onClick={() => handleCancel(s._id)}>Cancel</button>}
+
+                {role === "admin" && (
+                  <button onClick={() => handleDelete(s._id)}>Delete</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
 }
-
-export default App;
